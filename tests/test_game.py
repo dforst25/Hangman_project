@@ -1,6 +1,6 @@
-import pytest
-from hangman.game import *
 from hangman.words import *
+from hangman.io import *
+import builtins
 
 
 # ---------- tests for words.py ----------
@@ -21,7 +21,7 @@ def test_init_state_structure():
     assert state["display"] == ["_"] * len("apple")
     assert state["guessed"] == set()
     assert state["wrong_guesses"] == 0
-    assert state["max"] == 5
+    assert state["max_tries"] == 5
 
 
 def test_validate_guess_single_valid():
@@ -71,7 +71,7 @@ def test_is_won_true():
         "display": ["h", "i"],
         "guessed": {"h", "i"},
         "wrong_guesses": 0,
-        "max": 5,
+        "max_tries": 5,
     }
     assert is_won(state) is True
 
@@ -82,7 +82,7 @@ def test_is_won_false():
         "display": ["h", "_"],
         "guessed": {"h"},
         "wrong_guesses": 0,
-        "max": 5,
+        "max_tries": 5,
     }
     assert is_won(state) is False
 
@@ -93,7 +93,7 @@ def test_is_lost_true():
         "display": ["_", "_"],
         "guessed": {"a", "b"},
         "wrong_guesses": 5,
-        "max": 5,
+        "max_tries": 5,
     }
     assert is_lost(state) is True
 
@@ -104,7 +104,7 @@ def test_is_lost_false():
         "display": ["_", "_"],
         "guessed": {"a"},
         "wrong_guesses": 3,
-        "max": 5,
+        "max_tries": 5,
     }
     assert is_lost(state) is False
 
@@ -115,8 +115,121 @@ def test_render_display_format():
         "display": ["_", "נ", "_", "ה"],
         "guessed": set(),
         "wrong_guesses": 0,
-        "max": 5,
+        "max_tries": 5,
     }
     display_str = render_display(state)
     assert isinstance(display_str, str)
     assert "_ נ _ ה" in display_str or "_ נ _ ה" == display_str.strip()
+
+
+
+# ---------- tests for io.py ----------
+
+def test_prompt_guess(monkeypatch):
+    """Simulate user input for prompt_guess."""
+    monkeypatch.setattr(builtins, "input", lambda _: "a")
+    ch = prompt_guess()
+    assert ch == "a"
+
+
+def test_prompt_guess_strips_whitespace(monkeypatch):
+    """Ensure whitespace is stripped from user input."""
+    monkeypatch.setattr(builtins, "input", lambda _: "  b  ")
+    ch = prompt_guess()
+    assert ch == "b"
+
+
+def test_print_status_output(capsys):
+    """Check that print_status prints display, guessed, and remaining guesses."""
+    state = {
+        "secret": "apple",
+        "display": ["a", "_", "p", "_", "e"],
+        "guessed": {"a", "p", "x"},
+        "wrong_guesses": 1,
+        "max_tries": 5,
+    }
+    print_status(state)
+    captured = capsys.readouterr().out
+
+    assert render_display(state) in captured
+    # guessed letters must appear comma-separated
+    assert "a" in captured and "p" in captured and "x" in captured
+    # remaining guesses should match (5 - 1 = 4)
+    assert "4" in captured
+
+
+def test_print_result_win(capsys):
+    """Ensure print_result shows correct win message and summary."""
+    state = {
+        "secret": "apple",
+        "display": list("apple"),
+        "guessed": {"a", "p", "l", "e"},
+        "wrong_guesses": 0,
+        "max_tries": 5,
+    }
+    print_result(state)
+    captured = capsys.readouterr().out
+    assert "You Won" in captured
+    assert "apple" in captured
+    assert "a" in captured and "p" in captured and "l" in captured and "e" in captured
+    assert "=" * 15 in captured  # from render_summary
+
+
+def test_print_result_loss(capsys):
+    """Ensure print_result shows correct loss message and summary."""
+    state = {
+        "secret": "apple",
+        "display": ["a", "_", "_", "_", "_"],
+        "guessed": {"a", "b", "c", "d", "e"},
+        "wrong_guesses": 5,
+        "max_tries": 5,
+    }
+    print_result(state)
+    captured = capsys.readouterr().out
+    assert "You Lost" in captured
+    assert "apple" in captured
+    assert "a" in captured and "b" in captured
+    assert "=" * 15 in captured
+
+
+def test_render_summary_basic():
+    """Test render_summary output formatting."""
+    state = {
+        "secret": "banana",
+        "guessed": {"b", "a", "x"},
+    }
+    result = render_summary(state)
+    assert isinstance(result, str)
+    assert "banana" in result
+    assert "b" in result and "a" in result and "x" in result
+    assert result.count("=") >= 2
+
+
+def test_print_result_win(capsys):
+    """Ensure print_result shows win message."""
+    state = {
+        "secret": "apple",
+        "display": list("apple"),
+        "guessed": {"a", "p", "l", "e"},
+        "wrong_guesses": 1,
+        "max_tries": 5,
+    }
+    print_result(state)
+    captured = capsys.readouterr().out
+    assert "won" in captured.lower() or "congrat" in captured.lower()
+    assert "apple" in captured
+
+
+def test_print_result_loss(capsys):
+    """Ensure print_result shows loss message."""
+    state = {
+        "secret": "apple",
+        "display": ["a", "_", "_", "_", "_"],
+        "guessed": {"a", "b", "c", "d", "e"},
+        "wrong_guesses": 5,
+        "max_tries": 5,
+    }
+    print_result(state)
+    captured = capsys.readouterr().out
+    assert "lost" in captured.lower() or "game over" in captured.lower()
+    assert "apple" in captured
